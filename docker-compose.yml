@@ -1,0 +1,51 @@
+version: '3.8'
+
+services:
+  db:
+    image: postgres:16-alpine
+    container_name: loadbalancer_db
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: loadbalancer
+    ports:
+      - "5443:5432"
+    volumes:
+      - loadbalancer_pgdata:/var/lib/postgresql/data
+      - ./database/init.sql:/docker-entrypoint-initdb.d/init.sql:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d loadbalancer"]
+      interval: 3s
+      timeout: 3s
+      retries: 10
+
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: loadbalancer_backend
+    environment:
+      PORT: 4003
+      DATABASE_URL: postgres://postgres:postgres@db:5432/loadbalancer
+      JWT_SECRET: supersecret_loadbalancer_jwt_key_2026
+      CORS_ORIGIN: http://localhost:3003
+    ports:
+      - "4003:4003"
+    depends_on:
+      db:
+        condition: service_healthy
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+      args:
+        NEXT_PUBLIC_API_URL: http://localhost:4003
+    container_name: loadbalancer_frontend
+    ports:
+      - "3003:3003"
+    depends_on:
+      - backend
+
+volumes:
+  loadbalancer_pgdata:
